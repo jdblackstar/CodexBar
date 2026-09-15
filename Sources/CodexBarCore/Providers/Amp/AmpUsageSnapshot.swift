@@ -13,22 +13,28 @@ public struct AmpWorkspaceBalance: Codable, Equatable, Sendable {
 public struct AmpSubscriptionUsage: Equatable, Sendable {
     public let plan: String
     public let otherUsedPercent: Double
-    public let orbUsedPercent: Double
+    public let orbUsedPercent: Double?
     public let resetsAt: Date
     public let resetDescription: String
+    public let agentRemaining: Double?
+    public let agentLimit: Double?
 
     public init(
         plan: String,
         otherUsedPercent: Double,
-        orbUsedPercent: Double,
+        orbUsedPercent: Double?,
         resetsAt: Date,
-        resetDescription: String)
+        resetDescription: String,
+        agentRemaining: Double? = nil,
+        agentLimit: Double? = nil)
     {
         self.plan = plan
         self.otherUsedPercent = otherUsedPercent
         self.orbUsedPercent = orbUsedPercent
         self.resetsAt = resetsAt
         self.resetDescription = resetDescription
+        self.agentRemaining = agentRemaining
+        self.agentLimit = agentLimit
     }
 }
 
@@ -108,9 +114,10 @@ extension AmpUsageSnapshot {
                 resetsAt: usage.resetsAt,
                 resetDescription: usage.resetDescription)
         }
-        let subscriptionSecondary = self.subscription.map { usage in
-            RateWindow(
-                usedPercent: usage.orbUsedPercent,
+        let subscriptionSecondary = self.subscription.flatMap { usage -> RateWindow? in
+            guard let orbUsedPercent = usage.orbUsedPercent else { return nil }
+            return RateWindow(
+                usedPercent: orbUsedPercent,
                 windowMinutes: ProviderPaceCapability.monthlyWindowSentinelMinutes,
                 resetsAt: usage.resetsAt,
                 resetDescription: usage.resetDescription)
@@ -129,6 +136,11 @@ extension AmpUsageSnapshot {
             loginMethod: self.subscription?.plan ?? (primary == nil ? "Amp" : "Amp Free"))
 
         var detailRows: [ProviderDetailSection.Row] = []
+        if let remaining = self.subscription?.agentRemaining, let limit = self.subscription?.agentLimit {
+            detailRows.append(.makeRow(
+                label: "Agent credits",
+                value: "\(UsageFormatter.usdString(remaining)) of \(UsageFormatter.usdString(limit)) remaining"))
+        }
         if let individualCredits = self.individualCredits {
             detailRows.append(.makeRow(
                 label: "Individual credits",

@@ -39,6 +39,9 @@ enum AmpUsageParser {
             #"(?im)^\s*Subscription\s+(.+?):"# + subscriptionSuffix,
             #"(?im)^\s*Amp\s+(.+?)\s+Subscription:"# + subscriptionSuffix,
         ]
+        let tierPattern = #"(?im)^\s*Amp\s+([^\r\n]+?)\s+Tier:\s*agent\s+usage\s+\$"# + amountPattern +
+            #"\s+of\s+\$"# + amountPattern + #"\s+remaining\b[^\r\n]*?resets\s+upon\s+renewal\s+in\s+"# +
+            #"([0-9][0-9,]*)\s+(days?|months?)\b"#
         let creditsPattern = #"(?im)^\s*Individual credits:\s*\$?"# + amountPattern + #"\s+remaining"#
         let individualCredits = self.captures(in: text, pattern: creditsPattern)?.first
             .flatMap(self.number(from:))
@@ -82,6 +85,22 @@ enum AmpUsageParser {
         }()
         let resolvedFreeUsage = freeUsage ?? freePercentUsage
         let subscriptionUsage: AmpSubscriptionUsage? = {
+            // Agent dollars are authoritative; the displayed percentage is rounded. Orb text is independent.
+            if let tier = self.captures(in: text, pattern: tierPattern),
+               let remaining = self.number(from: tier[1]),
+               let limit = self.number(from: tier[2]), limit > 0,
+               let renewalValue = Int(tier[3].replacingOccurrences(of: ",", with: "")),
+               let resetsAt = self.subscriptionResetDate(value: renewalValue, unit: tier[4], now: now)
+            {
+                return AmpSubscriptionUsage(
+                    plan: tier[0],
+                    otherUsedPercent: min(100, max(0, (limit - remaining) / limit * 100)),
+                    orbUsedPercent: nil,
+                    resetsAt: resetsAt,
+                    resetDescription: "renews in \(renewalValue) \(tier[4].lowercased())",
+                    agentRemaining: remaining,
+                    agentLimit: limit)
+            }
             guard let subscription = subscriptionPatterns.lazy.compactMap({ pattern in
                 self.captures(in: text, pattern: pattern)
             }).first,

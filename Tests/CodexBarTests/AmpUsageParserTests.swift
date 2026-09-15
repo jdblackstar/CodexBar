@@ -16,6 +16,71 @@ struct AmpUsageParserTests {
     }
 
     @Test
+    func `parses megawatt tier agent dollars separately from individual credits`() throws {
+        let now = try self.date("2026-09-16T12:00:00Z")
+        let output = """
+        Signed in as user@example.com
+        Amp Megawatt Tier: agent usage $18.57 of $20 remaining (93%), \
+        orb usage 732.8h of 750h a1.small orb hours remaining (98%) - \
+        period 2026-09-13 to 2026-10-13, resets upon renewal in 27 days
+        Individual credits: $20 remaining (replenishes automatically) - https://ampcode.com/settings
+        """
+        let data = try JSONSerialization.data(withJSONObject: [
+            "ok": true,
+            "result": ["displayText": output],
+        ])
+
+        let snapshot = try AmpUsageFetcher.parseUsageAPIResponse(data, now: now)
+        let usage = snapshot.toUsageSnapshot(now: now)
+
+        #expect(snapshot.subscription?.plan == "Megawatt")
+        #expect(snapshot.subscription?.agentRemaining == 18.57)
+        #expect(snapshot.subscription?.agentLimit == 20)
+        #expect(try abs(#require(usage.primary?.usedPercent) - 7.15) < 0.0001)
+        #expect(usage.primary?.resetsAt == now.addingTimeInterval(27 * 24 * 60 * 60))
+        #expect(usage.primary?.resetDescription == "renews in 27 days")
+        #expect(usage.secondary == nil)
+        #expect(usage.identity?.loginMethod == "Megawatt")
+        #expect(usage.detailRow(label: "Agent credits")?.value == "$18.57 of $20.00 remaining")
+        #expect(usage.detailRow(label: "Individual credits")?.value == "$20.00")
+        #expect(AmpProviderDescriptor.primaryLabel(snapshot: usage) == "Agent usage")
+        #expect(AmpProviderDescriptor.secondaryLabel(snapshot: usage) == nil)
+
+        let decoded = try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(usage))
+        #expect(decoded.details == usage.details)
+        #expect(AmpProviderDescriptor.primaryLabel(snapshot: decoded) == "Agent usage")
+    }
+
+    @Test(arguments: [("0", 100.0), ("1,000", 0.0), ("1,100", 0.0), ("250", 75.0)])
+    func `tier agent usage does not depend on orb text or a fixed allowance`(
+        remaining: String,
+        expectedUsedPercent: Double) throws
+    {
+        let output = """
+        **Amp Example Tier:** agent usage $\(remaining) of $1,000 remaining - resets upon renewal in 1 month
+        """
+        let usage = try AmpUsageParser.parse(displayText: output).toUsageSnapshot()
+
+        #expect(usage.primary?.usedPercent == expectedUsedPercent)
+        #expect(usage.secondary == nil)
+        #expect(usage.identity?.loginMethod == "Example")
+        #expect(AmpProviderDescriptor.primaryLabel(snapshot: usage) == "Agent usage")
+    }
+
+    @Test
+    func `invalid tier allowance preserves individual credits without inventing usage`() throws {
+        let output = """
+        Amp Megawatt Tier: agent usage $0 of $0 remaining - resets upon renewal in 27 days
+        Individual credits: $12 remaining
+        """
+        let usage = try AmpUsageParser.parse(displayText: output).toUsageSnapshot()
+
+        #expect(usage.primary == nil)
+        #expect(usage.detailRow(label: "Agent credits") == nil)
+        #expect(usage.detailRow(label: "Individual credits")?.value == "$12.00")
+    }
+
+    @Test
     func `amp cli probe runs usage and parses balances`() async throws {
         let script = """
         [ "$1" = "usage" ] || exit 2
