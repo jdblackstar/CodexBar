@@ -1044,6 +1044,62 @@ extension MenuLayoutScreenshotRenderTests {
         }
     }
 
+    func test_ampTierPaceMatchesSharedPresentation() throws {
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-20T12:00:00Z"))
+        for showUsed in [false, true] {
+            for (remaining, expectedDetail) in [(18, "15% in reserve"), (10, "25% in deficit")] {
+                let output = """
+                Amp Example Tier: agent usage $\(remaining) of $20 remaining - \
+                period 2026-09-13 to 2026-10-13, resets upon renewal in 22 days
+                Individual credits: $11 remaining
+                """
+                let snapshot = try AmpUsageParser.parse(displayText: output, now: now).toUsageSnapshot()
+                let model = try UsageMenuCardView.Model.make(.init(
+                    provider: .amp,
+                    metadata: XCTUnwrap(ProviderDefaults.metadata[.amp]),
+                    snapshot: snapshot,
+                    credits: nil,
+                    creditsError: nil,
+                    dashboardError: nil,
+                    tokenSnapshot: nil,
+                    tokenError: nil,
+                    account: AccountInfo(email: nil, plan: nil),
+                    isRefreshing: false,
+                    lastError: nil,
+                    usageBarsShowUsed: showUsed,
+                    resetTimeDisplayStyle: .countdown,
+                    tokenCostUsageEnabled: false,
+                    showOptionalCreditsAndExtraUsage: true,
+                    hidePersonalInfo: true,
+                    paceVisible: true,
+                    usesLiveSubtitle: false,
+                    now: now))
+                let agent = try XCTUnwrap(model.metrics.first)
+                XCTAssertEqual(agent.title, "Agent usage")
+                XCTAssertEqual(agent.detailLeftText, expectedDetail)
+                XCTAssertEqual(agent.pacePercent, showUsed ? 25 : 75)
+                XCTAssertEqual(agent.paceOnTop, remaining == 18)
+                XCTAssertEqual(agent.percent, showUsed ? Double(20 - remaining) * 5 : Double(remaining) * 5)
+
+                guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_AMP_SCREENSHOT_DIR"] else { continue }
+                let directory = URL(fileURLWithPath: dir, isDirectory: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                for dark in [false, true] {
+                    let view = AnyView(UsageMenuCardView(model: model, width: Self.width)
+                        .environment(\.locale, Locale(identifier: "en_US_POSIX"))
+                        .environment(\.colorScheme, dark ? .dark : .light)
+                        .environment(\.displayScale, 2)
+                        .background(Color(nsColor: .windowBackgroundColor)))
+                    let hosting = NSHostingView(rootView: view)
+                    hosting.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                    let stem = "amp-\(remaining)-\(showUsed ? "used" : "left")-\(dark ? "dark" : "light")"
+                    let png = try XCTUnwrap(Self.pngData(hosting: hosting))
+                    try png.write(to: directory.appendingPathComponent("\(stem).png"))
+                }
+            }
+        }
+    }
+
     static func pngDataWithWindow(hosting: NSView) -> Data? {
         // Native List rows need a window to materialize, but it never needs to be ordered onscreen.
         let size = hosting.fittingSize

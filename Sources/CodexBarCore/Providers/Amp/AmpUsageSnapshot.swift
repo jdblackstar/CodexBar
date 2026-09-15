@@ -18,6 +18,7 @@ public struct AmpSubscriptionUsage: Equatable, Sendable {
     public let resetDescription: String
     public let agentRemaining: Double?
     public let agentLimit: Double?
+    public let periodStart: Date?
 
     public init(
         plan: String,
@@ -26,7 +27,8 @@ public struct AmpSubscriptionUsage: Equatable, Sendable {
         resetsAt: Date,
         resetDescription: String,
         agentRemaining: Double? = nil,
-        agentLimit: Double? = nil)
+        agentLimit: Double? = nil,
+        periodStart: Date? = nil)
     {
         self.plan = plan
         self.otherUsedPercent = otherUsedPercent
@@ -35,6 +37,7 @@ public struct AmpSubscriptionUsage: Equatable, Sendable {
         self.resetDescription = resetDescription
         self.agentRemaining = agentRemaining
         self.agentLimit = agentLimit
+        self.periodStart = periodStart
     }
 }
 
@@ -107,10 +110,22 @@ extension AmpUsageSnapshot {
             nil
         }
 
+        let subscriptionWindowMinutes = self.subscription.flatMap { usage -> Int? in
+            if let start = usage.periodStart {
+                return Int(usage.resetsAt.timeIntervalSince(start) / 60)
+            }
+            // Preserve legacy calendar-month pacing, but do not invent a Tier period when dates are missing.
+            guard usage.agentRemaining == nil else { return nil }
+            return ProviderPaceCapability.calendarMonthResetWindow.resolvedResetWindowForPace(RateWindow(
+                usedPercent: usage.otherUsedPercent,
+                windowMinutes: ProviderPaceCapability.monthlyWindowSentinelMinutes,
+                resetsAt: usage.resetsAt,
+                resetDescription: usage.resetDescription)).windowMinutes
+        }
         let subscriptionPrimary = self.subscription.map { usage in
             RateWindow(
                 usedPercent: usage.otherUsedPercent,
-                windowMinutes: ProviderPaceCapability.monthlyWindowSentinelMinutes,
+                windowMinutes: subscriptionWindowMinutes,
                 resetsAt: usage.resetsAt,
                 resetDescription: usage.resetDescription)
         }
@@ -118,7 +133,7 @@ extension AmpUsageSnapshot {
             guard let orbUsedPercent = usage.orbUsedPercent else { return nil }
             return RateWindow(
                 usedPercent: orbUsedPercent,
-                windowMinutes: ProviderPaceCapability.monthlyWindowSentinelMinutes,
+                windowMinutes: subscriptionWindowMinutes,
                 resetsAt: usage.resetsAt,
                 resetDescription: usage.resetDescription)
         }

@@ -37,7 +37,8 @@ struct AmpUsageParserTests {
         #expect(snapshot.subscription?.agentRemaining == 18.57)
         #expect(snapshot.subscription?.agentLimit == 20)
         #expect(try abs(#require(usage.primary?.usedPercent) - 7.15) < 0.0001)
-        #expect(usage.primary?.resetsAt == now.addingTimeInterval(27 * 24 * 60 * 60))
+        #expect(try usage.primary?.resetsAt == self.date("2026-10-13T00:00:00Z"))
+        #expect(usage.primary?.windowMinutes == 30 * 24 * 60)
         #expect(usage.primary?.resetDescription == "renews in 27 days")
         #expect(usage.secondary == nil)
         #expect(usage.identity?.loginMethod == "Megawatt")
@@ -49,6 +50,58 @@ struct AmpUsageParserTests {
         let decoded = try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(usage))
         #expect(decoded.details == usage.details)
         #expect(AmpProviderDescriptor.primaryLabel(snapshot: decoded) == "Agent usage")
+    }
+
+    @Test(arguments: [("18", -15.0), ("10", 25.0)])
+    func `tier pace uses fixed billing dates rather than rounded renewal days`(
+        remaining: String,
+        delta: Double) throws
+    {
+        let now = try self.date("2026-02-20T00:00:00Z")
+        let output = """
+        Amp Example Tier: agent usage $\(remaining) of $20 remaining - \
+        period 2026-02-13 to 2026-03-13, resets upon renewal in 20 days
+        """
+        let usage = try AmpUsageParser.parse(displayText: output, now: now).toUsageSnapshot()
+        let window = try #require(usage.primary)
+        let capability = AmpProviderDescriptor.descriptor.pace
+        #expect(window.windowMinutes == 28 * 24 * 60)
+        #expect(capability.supportsResetWindowPace(window: window, now: now))
+        #expect(capability.resolvedResetWindowForPace(window) == window)
+        let pace = try #require(UsagePace.weekly(window: window, now: now))
+        #expect(pace.expectedUsedPercent == 25)
+        #expect(pace.deltaPercent == delta)
+        let later = try AmpUsageParser.parse(displayText: output, now: now.addingTimeInterval(3600))
+            .toUsageSnapshot()
+        #expect(later.primary?.resetsAt == window.resetsAt)
+    }
+
+    @Test
+    func `tier pace respects period boundaries and explicit thirty day periods`() throws {
+        let start = try self.date("2026-07-01T00:00:00Z")
+        let end = try self.date("2026-07-31T00:00:00Z")
+        let output = """
+        Amp Example Tier: agent usage $20 of $20 remaining - \
+        period 2026-07-01 to 2026-07-31, resets upon renewal in 30 days
+        """
+        let window = try #require(AmpUsageParser.parse(displayText: output, now: start).toUsageSnapshot().primary)
+        let resolved = AmpProviderDescriptor.descriptor.pace.resolvedResetWindowForPace(window)
+        #expect(resolved.windowMinutes == 30 * 24 * 60)
+        #expect(UsagePace.weekly(window: resolved, now: start.addingTimeInterval(-1)) == nil)
+        #expect(UsagePace.weekly(window: resolved, now: start)?.expectedUsedPercent == 0)
+        #expect(UsagePace.weekly(window: resolved, now: end.addingTimeInterval(-1)) != nil)
+        #expect(UsagePace.weekly(window: resolved, now: end) == nil)
+    }
+
+    @Test(arguments: ["", "period 2026-02-30 to 2026-03-30", "period 2026-10-13 to 2026-09-13"])
+    func `tier without valid dates does not fabricate pace`(period: String) throws {
+        let output = """
+        Amp Example Tier: agent usage $18 of $20 remaining - \(period), resets upon renewal in 27 days
+        """
+        let window = try #require(AmpUsageParser.parse(displayText: output).toUsageSnapshot().primary)
+        #expect(window.usedPercent == 10)
+        #expect(window.windowMinutes == nil)
+        #expect(!AmpProviderDescriptor.descriptor.pace.supportsResetWindowPace(window: window, now: Date()))
     }
 
     @Test(arguments: [("0", 100.0), ("1,000", 0.0), ("1,100", 0.0), ("250", 75.0)])
@@ -305,7 +358,7 @@ struct AmpUsageParserTests {
         #expect(snapshot.subscription?.plan == "Megawatt")
         #expect(usage.primary?.usedPercent == 0)
         #expect(usage.secondary?.usedPercent == 0)
-        #expect(usage.primary?.windowMinutes == ProviderPaceCapability.monthlyWindowSentinelMinutes)
+        #expect(usage.primary?.windowMinutes == 31 * 24 * 60)
         #expect(try usage.primary?.resetsAt == self.date("2026-09-18T12:00:00Z"))
         #expect(usage.secondary?.resetsAt == usage.primary?.resetsAt)
         #expect(usage.identity?.loginMethod == "Megawatt")
