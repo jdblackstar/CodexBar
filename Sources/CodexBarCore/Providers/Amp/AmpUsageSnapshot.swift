@@ -19,6 +19,8 @@ public struct AmpSubscriptionUsage: Equatable, Sendable {
     public let agentRemaining: Double?
     public let agentLimit: Double?
     public let periodStart: Date?
+    public let orbHoursRemaining: Double?
+    public let orbHoursLimit: Double?
 
     public init(
         plan: String,
@@ -28,7 +30,9 @@ public struct AmpSubscriptionUsage: Equatable, Sendable {
         resetDescription: String,
         agentRemaining: Double? = nil,
         agentLimit: Double? = nil,
-        periodStart: Date? = nil)
+        periodStart: Date? = nil,
+        orbHoursRemaining: Double? = nil,
+        orbHoursLimit: Double? = nil)
     {
         self.plan = plan
         self.otherUsedPercent = otherUsedPercent
@@ -38,6 +42,8 @@ public struct AmpSubscriptionUsage: Equatable, Sendable {
         self.agentRemaining = agentRemaining
         self.agentLimit = agentLimit
         self.periodStart = periodStart
+        self.orbHoursRemaining = orbHoursRemaining
+        self.orbHoursLimit = orbHoursLimit
     }
 }
 
@@ -165,13 +171,23 @@ extension AmpUsageSnapshot {
             .makeRow(label: "Workspace \($0.name)", value: UsageFormatter.usdString($0.remaining))
         })
 
+        var details: [ProviderDetailSection] = detailRows.isEmpty ? [] : [.makeSection(
+            title: "Credits",
+            rows: detailRows)]
+        if let remaining = self.subscription?.orbHoursRemaining, let limit = self.subscription?.orbHoursLimit {
+            let format = FloatingPointFormatStyle<Double>.number.precision(.fractionLength(0...2))
+            details.append(.makeSection(title: "Orb allowance", rows: [.makeRow(
+                label: "a1.small-equivalent hours",
+                value: "\(remaining.formatted(format)) of \(limit.formatted(format)) remaining")]))
+        }
+
         return UsageSnapshot(
             primary: primary,
             secondary: subscriptionSecondary,
             tertiary: nil,
             extraRateWindows: extraRateWindows,
             providerCost: nil,
-            details: detailRows.isEmpty ? [] : [.makeSection(title: "Credits", rows: detailRows)],
+            details: details,
             updatedAt: self.updatedAt,
             identity: identity)
     }

@@ -4,6 +4,7 @@
 
 ### Fixed
 - Amp: anchor Tier reserve/deficit pacing to the reported billing dates instead of rounded renewal days; omit pacing when those dates are unavailable.
+- Amp: show separate agent-credit and orb-allowance bars for Tier usage, using exact balances and labeling orb hours as a1.small-equivalent hours.
 - Claude: keep claude-swap accounts distinguishable with stable Account N labels in stacked cards and compact rows when Hide Personal Info is enabled, including unavailable accounts, while preserving alias and identity redaction (#3495). Thanks @eggyrooch-blip!
 - Claude: avoid inflated token and cost estimates when proxy transcripts repeat cumulative usage without request IDs, preserve distinct response identities, and rebuild older Claude/Vertex cached totals (#3659). Thanks @MoridinBG!
 - Codex Workspaces: reduce cache-read memory in the experimental debug inspector by skipping raw token snapshots while preserving exact pricing rows and consistent project totals during concurrent scans (#3661). Thanks @apple-ouyang!

@@ -40,12 +40,16 @@ struct AmpUsageParserTests {
         #expect(try usage.primary?.resetsAt == self.date("2026-10-13T00:00:00Z"))
         #expect(usage.primary?.windowMinutes == 30 * 24 * 60)
         #expect(usage.primary?.resetDescription == "renews in 27 days")
-        #expect(usage.secondary == nil)
+        #expect(try abs(#require(usage.secondary?.usedPercent) - 2.2933333333) < 0.0001)
+        #expect(usage.secondary?.resetsAt == usage.primary?.resetsAt)
+        #expect(snapshot.subscription?.orbHoursRemaining == 732.8)
+        #expect(snapshot.subscription?.orbHoursLimit == 750)
+        #expect(usage.detailRow(label: "a1.small-equivalent hours")?.value == "732.8 of 750 remaining")
         #expect(usage.identity?.loginMethod == "Megawatt")
         #expect(usage.detailRow(label: "Agent credits")?.value == "$18.57 of $20.00 remaining")
         #expect(usage.detailRow(label: "Individual credits")?.value == "$20.00")
         #expect(AmpProviderDescriptor.primaryLabel(snapshot: usage) == "Agent usage")
-        #expect(AmpProviderDescriptor.secondaryLabel(snapshot: usage) == nil)
+        #expect(AmpProviderDescriptor.secondaryLabel(snapshot: usage) == "Orb usage")
 
         let decoded = try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(usage))
         #expect(decoded.details == usage.details)
@@ -102,6 +106,41 @@ struct AmpUsageParserTests {
         #expect(window.usedPercent == 10)
         #expect(window.windowMinutes == nil)
         #expect(!AmpProviderDescriptor.descriptor.pace.supportsResetWindowPace(window: window, now: Date()))
+    }
+
+    @Test(arguments: [("0", 100.0), ("1,500", 0.0), ("1,600", 0.0), ("375.75", 74.95)])
+    func `tier orb allowance uses exact hours and its own limit`(
+        remaining: String,
+        expectedUsedPercent: Double) throws
+    {
+        let output = """
+        Amp Example Tier: agent usage $18.57 of $20 remaining (93%), \
+        orb usage \(remaining)h of 1,500h a1.small orb hours remaining (99%) - resets upon renewal in 2 days
+        """
+        let usage = try AmpUsageParser.parse(displayText: output).toUsageSnapshot()
+
+        #expect(try abs(#require(usage.secondary?.usedPercent) - expectedUsedPercent) < 0.0001)
+        #expect(try abs(#require(usage.primary?.usedPercent) - 7.15) < 0.0001)
+    }
+
+    @Test(arguments: [
+        "",
+        "orb usage unavailable",
+        "orb usage 0h of 0h a1.small orb hours remaining",
+        "orb usage 12h of 50h a1.large orb hours remaining",
+    ])
+    func `missing or drifting orb allowance preserves agent credits`(orb: String) throws {
+        let output = """
+        Amp Example Tier: agent usage $3 of $20 remaining (15%), \(orb) - resets upon renewal in 2 days
+        Individual credits: $11 remaining
+        """
+        let usage = try AmpUsageParser.parse(displayText: output).toUsageSnapshot()
+
+        #expect(usage.primary?.usedPercent == 85)
+        #expect(usage.secondary == nil)
+        #expect(usage.detailRow(label: "a1.small-equivalent hours") == nil)
+        #expect(usage.detailRow(label: "Agent credits")?.value == "$3.00 of $20.00 remaining")
+        #expect(usage.detailRow(label: "Individual credits")?.value == "$11.00")
     }
 
     @Test(arguments: [("0", 100.0), ("1,000", 0.0), ("1,100", 0.0), ("250", 75.0)])

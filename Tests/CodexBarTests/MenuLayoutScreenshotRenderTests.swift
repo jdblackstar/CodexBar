@@ -1047,9 +1047,13 @@ extension MenuLayoutScreenshotRenderTests {
     func test_ampTierPaceMatchesSharedPresentation() throws {
         let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-20T12:00:00Z"))
         for showUsed in [false, true] {
-            for (remaining, expectedDetail) in [(18, "15% in reserve"), (10, "25% in deficit")] {
+            for (remaining, expectedDetail, orbHours, orbDetail) in [
+                (18, "15% in reserve", 450, "15% in deficit"),
+                (10, "25% in deficit", 675, "15% in reserve"),
+            ] {
                 let output = """
-                Amp Example Tier: agent usage $\(remaining) of $20 remaining - \
+                Amp Example Tier: agent usage $\(remaining) of $20 remaining, \
+                orb usage \(orbHours)h of 750h a1.small orb hours remaining - \
                 period 2026-09-13 to 2026-10-13, resets upon renewal in 22 days
                 Individual credits: $11 remaining
                 """
@@ -1080,6 +1084,13 @@ extension MenuLayoutScreenshotRenderTests {
                 XCTAssertEqual(agent.pacePercent, showUsed ? 25 : 75)
                 XCTAssertEqual(agent.paceOnTop, remaining == 18)
                 XCTAssertEqual(agent.percent, showUsed ? Double(20 - remaining) * 5 : Double(remaining) * 5)
+                let orb = try XCTUnwrap(model.metrics.last)
+                XCTAssertEqual(model.metrics.count, 2)
+                XCTAssertEqual(orb.title, "Orb usage")
+                XCTAssertEqual(orb.detailLeftText, orbDetail)
+                XCTAssertEqual(orb.pacePercent, showUsed ? 25 : 75)
+                XCTAssertEqual(orb.paceOnTop, orbHours == 675)
+                XCTAssertEqual(orb.percent, showUsed ? (orbHours == 675 ? 10 : 40) : (orbHours == 675 ? 90 : 60))
 
                 guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_AMP_SCREENSHOT_DIR"] else { continue }
                 let directory = URL(fileURLWithPath: dir, isDirectory: true)

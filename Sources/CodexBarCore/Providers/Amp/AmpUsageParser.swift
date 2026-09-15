@@ -93,15 +93,27 @@ enum AmpUsageParser {
                let resetsAt = self.subscriptionResetDate(value: renewalValue, unit: tier[5], now: now)
             {
                 let period = self.tierPeriod(in: tier[3])
+                let orbPattern = #"(?i)\borb\s+usage\s+"# +
+                    amountPattern + #"h\s+of\s+"# + amountPattern + #"h\s+a1\.small\s+orb\s+hours\s+remaining\b"#
+                let orb = self.captures(in: tier[3], pattern: orbPattern)
+                let orbRemaining = orb.flatMap { self.number(from: $0[0]) }
+                let orbLimit = orb.flatMap { self.number(from: $0[1]) }.flatMap { $0 > 0 ? $0 : nil }
+                let orbUsedPercent: Double? = if let orbRemaining, let orbLimit {
+                    min(100, max(0, (orbLimit - orbRemaining) / orbLimit * 100))
+                } else {
+                    nil
+                }
                 return AmpSubscriptionUsage(
                     plan: tier[0],
                     otherUsedPercent: min(100, max(0, (limit - remaining) / limit * 100)),
-                    orbUsedPercent: nil,
+                    orbUsedPercent: orbUsedPercent,
                     resetsAt: period?.end ?? resetsAt,
                     resetDescription: "renews in \(renewalValue) \(tier[5].lowercased())",
                     agentRemaining: remaining,
                     agentLimit: limit,
-                    periodStart: period?.start)
+                    periodStart: period?.start,
+                    orbHoursRemaining: orbLimit == nil ? nil : orbRemaining,
+                    orbHoursLimit: orbLimit)
             }
             guard let subscription = subscriptionPatterns.lazy.compactMap({ pattern in
                 self.captures(in: text, pattern: pattern)
