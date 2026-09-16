@@ -67,7 +67,7 @@ public enum AmpProviderDescriptor {
     }
 
     public static func primaryLabel(snapshot: UsageSnapshot) -> String? {
-        if snapshot.detailRow(label: "Agent credits") != nil {
+        if snapshot.detailRow(label: "Agent") != nil {
             return "Agent usage"
         }
         return snapshot.secondary == nil ? nil : "Other usage"

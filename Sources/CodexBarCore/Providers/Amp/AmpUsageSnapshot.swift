@@ -156,29 +156,35 @@ extension AmpUsageSnapshot {
             accountOrganization: self.accountOrganization,
             loginMethod: self.subscription?.plan ?? (primary == nil ? "Amp" : "Amp Free"))
 
-        var detailRows: [ProviderDetailSection.Row] = []
-        if let remaining = self.subscription?.agentRemaining, let limit = self.subscription?.agentLimit {
-            detailRows.append(.makeRow(
-                label: "Agent credits",
-                value: "\(UsageFormatter.usdString(remaining)) of \(UsageFormatter.usdString(limit)) remaining"))
+        var allowanceRows: [ProviderDetailSection.Row] = []
+        if let remaining = self.subscription?.agentRemaining {
+            allowanceRows.append(.makeRow(label: "Agent", value: UsageFormatter.usdString(remaining)))
         }
+        if let remaining = self.subscription?.orbHoursRemaining {
+            let hours = remaining > 0 && remaining < 1
+                ? "< 1h"
+                : "\(remaining.rounded(.down).formatted(.number.precision(.fractionLength(0))))h"
+            allowanceRows.append(.makeRow(
+                label: "Orb",
+                value: hours,
+                secondaryValue: "a1.small-equivalent hours"))
+        }
+        var details: [ProviderDetailSection] = allowanceRows.isEmpty ? [] : [.makeSection(
+            title: "Monthly allowances",
+            rows: allowanceRows)]
+
+        var detailRows: [ProviderDetailSection.Row] = []
         if let individualCredits = self.individualCredits {
             detailRows.append(.makeRow(
-                label: "Individual credits",
-                value: UsageFormatter.usdString(individualCredits)))
+                label: "Individual",
+                value: UsageFormatter.usdString(individualCredits),
+                secondaryValue: "For agent and orb usage"))
         }
         detailRows.append(contentsOf: self.workspaceBalances.map {
             .makeRow(label: "Workspace \($0.name)", value: UsageFormatter.usdString($0.remaining))
         })
-
-        var details: [ProviderDetailSection] = detailRows.isEmpty ? [] : [.makeSection(
-            title: "Credits",
-            rows: detailRows)]
-        if let remaining = self.subscription?.orbHoursRemaining, let limit = self.subscription?.orbHoursLimit {
-            let format = FloatingPointFormatStyle<Double>.number.precision(.fractionLength(0...2))
-            details.append(.makeSection(title: "Orb allowance", rows: [.makeRow(
-                label: "a1.small-equivalent hours",
-                value: "\(remaining.formatted(format)) of \(limit.formatted(format)) remaining")]))
+        if !detailRows.isEmpty {
+            details.append(.makeSection(title: "Credits", rows: detailRows))
         }
 
         return UsageSnapshot(

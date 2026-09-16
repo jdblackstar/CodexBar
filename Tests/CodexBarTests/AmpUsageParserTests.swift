@@ -44,10 +44,14 @@ struct AmpUsageParserTests {
         #expect(usage.secondary?.resetsAt == usage.primary?.resetsAt)
         #expect(snapshot.subscription?.orbHoursRemaining == 732.8)
         #expect(snapshot.subscription?.orbHoursLimit == 750)
-        #expect(usage.detailRow(label: "a1.small-equivalent hours")?.value == "732.8 of 750 remaining")
+        #expect(usage.details.map(\.title) == ["Monthly allowances", "Credits"])
+        #expect(usage.details.first?.rows.map(\.label) == ["Agent", "Orb"])
+        #expect(usage.detailRow(label: "Orb")?.value == "732h")
+        #expect(usage.detailRow(label: "Orb")?.secondaryValue == "a1.small-equivalent hours")
         #expect(usage.identity?.loginMethod == "Megawatt")
-        #expect(usage.detailRow(label: "Agent credits")?.value == "$18.57 of $20.00 remaining")
-        #expect(usage.detailRow(label: "Individual credits")?.value == "$20.00")
+        #expect(usage.detailRow(label: "Agent")?.value == "$18.57")
+        #expect(usage.detailRow(label: "Individual")?.value == "$20.00")
+        #expect(usage.detailRow(label: "Individual")?.secondaryValue == "For agent and orb usage")
         #expect(AmpProviderDescriptor.primaryLabel(snapshot: usage) == "Agent usage")
         #expect(AmpProviderDescriptor.secondaryLabel(snapshot: usage) == "Orb usage")
 
@@ -123,6 +127,19 @@ struct AmpUsageParserTests {
         #expect(try abs(#require(usage.primary?.usedPercent) - 7.15) < 0.0001)
     }
 
+    @Test(arguments: [(0.0, "0h"), (0.01, "< 1h"), (0.99, "< 1h"), (1.0, "1h"), (1.99, "1h"), (732.8, "732h")])
+    func `orb display floors hours without rounding balances or usage`(remaining: Double, expected: String) throws {
+        let output = """
+        Amp Example Tier: agent usage $18.57 of $20 remaining, \
+        orb usage \(remaining)h of 750h a1.small orb hours remaining - resets upon renewal in 2 days
+        """
+        let snapshot = try AmpUsageParser.parse(displayText: output)
+        let usage = snapshot.toUsageSnapshot()
+        #expect(snapshot.subscription?.orbHoursRemaining == remaining)
+        #expect(usage.detailRow(label: "Orb")?.value == expected)
+        #expect(try abs(#require(usage.secondary?.usedPercent) - (750 - remaining) / 750 * 100) < 0.0001)
+    }
+
     @Test(arguments: [
         "",
         "orb usage unavailable",
@@ -138,9 +155,9 @@ struct AmpUsageParserTests {
 
         #expect(usage.primary?.usedPercent == 85)
         #expect(usage.secondary == nil)
-        #expect(usage.detailRow(label: "a1.small-equivalent hours") == nil)
-        #expect(usage.detailRow(label: "Agent credits")?.value == "$3.00 of $20.00 remaining")
-        #expect(usage.detailRow(label: "Individual credits")?.value == "$11.00")
+        #expect(usage.detailRow(label: "Orb") == nil)
+        #expect(usage.detailRow(label: "Agent")?.value == "$3.00")
+        #expect(usage.detailRow(label: "Individual")?.value == "$11.00")
     }
 
     @Test(arguments: [("0", 100.0), ("1,000", 0.0), ("1,100", 0.0), ("250", 75.0)])
@@ -168,8 +185,8 @@ struct AmpUsageParserTests {
         let usage = try AmpUsageParser.parse(displayText: output).toUsageSnapshot()
 
         #expect(usage.primary == nil)
-        #expect(usage.detailRow(label: "Agent credits") == nil)
-        #expect(usage.detailRow(label: "Individual credits")?.value == "$12.00")
+        #expect(usage.detailRow(label: "Agent") == nil)
+        #expect(usage.detailRow(label: "Individual")?.value == "$12.00")
     }
 
     @Test
@@ -216,7 +233,7 @@ struct AmpUsageParserTests {
         #expect(snapshot.workspaceBalances == [AmpWorkspaceBalance(name: "meow", remaining: 10.22)])
         #expect(snapshot.accountEmail == "ampcode@3kh0.net")
         #expect(snapshot.accountOrganization == "echo")
-        #expect(snapshot.toUsageSnapshot(now: now).detailRow(label: "Individual credits")?.value == "$25.64")
+        #expect(snapshot.toUsageSnapshot(now: now).detailRow(label: "Individual")?.value == "$25.64")
         #expect(snapshot.toUsageSnapshot(now: now).detailRow(label: "Workspace meow")?.value == "$10.22")
 
         let encoded = try JSONEncoder().encode(snapshot.toUsageSnapshot(now: now))
@@ -280,7 +297,7 @@ struct AmpUsageParserTests {
         #expect(usage.primary?.usedPercent == 32)
         #expect(usage.secondary?.usedPercent == 3)
         #expect(usage.extraRateWindows?.first?.window.usedPercent == 100)
-        #expect(usage.detailRow(label: "Individual credits")?.value == "$3.23")
+        #expect(usage.detailRow(label: "Individual")?.value == "$3.23")
     }
 
     @Test
@@ -401,7 +418,7 @@ struct AmpUsageParserTests {
         #expect(try usage.primary?.resetsAt == self.date("2026-09-18T12:00:00Z"))
         #expect(usage.secondary?.resetsAt == usage.primary?.resetsAt)
         #expect(usage.identity?.loginMethod == "Megawatt")
-        #expect(usage.detailRow(label: "Individual credits")?.value == "$4.35")
+        #expect(usage.detailRow(label: "Individual")?.value == "$4.35")
     }
 
     @Test
@@ -469,7 +486,7 @@ struct AmpUsageParserTests {
         #expect(snapshot.individualCredits == 25.64)
         #expect(usage.primary == nil)
         #expect(usage.secondary == nil)
-        #expect(usage.detailRow(label: "Individual credits")?.value == "$25.64")
+        #expect(usage.detailRow(label: "Individual")?.value == "$25.64")
         #expect(usage.identity?.loginMethod == "Amp")
         #expect(AmpProviderDescriptor.primaryLabel(snapshot: usage) == nil)
         #expect(AmpProviderDescriptor.secondaryLabel(snapshot: usage) == nil)

@@ -3,6 +3,7 @@
 ## 0.60.4 — Unreleased
 
 ### Fixed
+- Amp: separate monthly allowances from shared agent/orb credits, showing remaining dollars and floored whole orb hours.
 - Amp: anchor Tier reserve/deficit pacing to the reported billing dates instead of rounded renewal days; omit pacing when those dates are unavailable.
 - Amp: show separate agent-credit and orb-allowance bars for Tier usage, using exact balances and labeling orb hours as a1.small-equivalent hours.
 - Claude: keep claude-swap accounts distinguishable with stable Account N labels in stacked cards and compact rows when Hide Personal Info is enabled, including unavailable accounts, while preserving alias and identity redaction (#3495). Thanks @eggyrooch-blip!
